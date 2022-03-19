@@ -1,0 +1,120 @@
+# Binary clock
+
+## Designing the board
+
+Since I wanted to be able to build my own binary clock to see if I could find a good LED driver that had fewer supply chain issues, I looked at JLCPCB's parts availability. I've used JLCPCB and they're amazingly inexpensive for building simple things. The parts list is at https://jlcpcb.com/parts.
+
+Titan Micro makes many LED drivers. The TM1620 is one of the simpler versions they make and it can drive 48 LEDs - more than we need.
+
+The datasheet can be downloaded at https://jlcpcb.com/parts/componentSearch?isSearch=true&searchTxt=TM1620 or https://github.com/fhunleth/binary_clock/tree/main/datasheets. The second location has an English translation that I found. I'm unsure who translated it.
+
+Even though I can't read Chinese, I found the original TM1620 datasheet promising enough to try. The circuit on page 18 was super helful since it shows how the LEDs are hooked up. The wires are hooked up in a grid pattern. The `SEGn` wires are the rows. The `GRIDn` wires are columns.
+
+You can see how I hooked up the LEDs at https://github.com/fhunleth/binary_clock/blob/main/hw/Schematic_binary_clock2_2022-03-19.pdf.
+
+The schematic will be important later.
+
+## Bringing up the Binary Clock PCB the first time
+
+The Raspberry Pi is connected to the TM1620 via the SPI bus. The first thing to do is to use Circuits.SPI to open the bus.
+
+By far the trickiest part about the TM1620 is noticing that the bits are sent as little endian. This is shown in section 8, figure 5. SPI normally sends data as big endian. Luckily, `Circuits.SPI` has an `lsb_first` option to send the least significant bit first.
+
+The second tricky part about the TM1620 is that the data bits (DIN) get sampled when the CLK line goes low to high. You can see this in figure 5 since the clock goes up in the middle of when each bit is on the wire. This is a SPI bus thing that's called mode. There are 4 SPI modes. Most parts I've used are in SPI mode 0. That's `Circuit.SPI`'s default. The TM1620 uses SPI mode 3. The `Circuit.SPI.open/2` docs describe this more.
+
+Here's the code to open the SPI bus:
+
+```elixir
+alias Circuits.SPI
+
+{:ok, spi} = SPI.open("spidev0.0", mode: 3, lsb_first: true)
+```
+
+## SPI communication
+
+The next step is to send data to the TM1620 to make it turn on an LED. The flow chart on page 7 of the datasheet shows how to do this:
+
+1. Send the command to set the display mode
+2. Send the command to write to data memory
+3. Send the data bytes (what LEDs should be on and off)
+4. Send the command to turn the LEDs on and set their brightness
+
+The display mode is documented in the table on page 3. We have 6 columns of LEDs. Each column is called a "digit" in the datasheet, so we set "6 digit 8 segments". The English translation of the datasheet has a typo here. Basically, it says to send `0b00000010` or just the number `2`:
+
+```elixir
+SPI.transfer(spi, <<0b00000010>>)
+```
+
+Next is to send the command to write data. The flow chart says to send `0x40` and this can be checked on page 3 as well:
+
+```elixir
+SPI.transfer(spi, <<0x40>>)
+```
+
+Next is to send the command to store bytes at address `0` and then the LED state. The flowchart says the command to do this is `0xc0` and this can be confirmed on page 4. The bottom of page 4 has a table for how the LED bytes are laid out. It could more simply be written that for 6 columns (aka digits), the bits in the first byte are the 8 possible LEDs in that column. The second byte is zero.
+
+For example, if we want the binary clock to show `1, 2, 3, 4, 5, 6` in binary, we'd send this:
+
+```elixir
+SPI.transfer(spi, <<0xC0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0>>)
+```
+
+The final step is to send the command to turn the TM1620 on and set the brightness. This is shown in the table at the bottom of page 3. The dimmest value is `0x88`. The brightest value is `0x8f`. `0x80` is off.
+
+```elixir
+SPI.transfer(spi, <<0x88>>)
+```
+
+The lights should be on. Hopefully it shows what you'd expect. If you want to change it, modify the `0xc0` command above.
+
+## Simple clock
+
+Here's a short module for setting the time:
+
+```elixir
+defmodule Clock do
+  @spec show(SPI.spi_bus(), 0..23, 0..59, 0..59, 0..7) :: :ok | {:error, any()}
+  def show(spi, hours, minutes, seconds, brightness \\ 0) do
+    with {:ok, _} <- SPI.transfer(spi, <<0x02>>),
+         {:ok, _} <- SPI.transfer(spi, <<0x40>>),
+         {:ok, _} <- SPI.transfer(spi, [0xC0, to_bcd(hours), to_bcd(minutes), to_bcd(seconds)]),
+         {:ok, _} <- SPI.transfer(spi, <<0x88 + brightness>>) do
+      :ok
+    end
+  end
+
+  @spec off(SPI.spi_bus()) :: :ok | {:error, any()}
+  def off(spi) do
+    SPI.transfer(spi, <<0x80>>)
+  end
+
+  @spec to_bcd(0..100) :: binary()
+  def to_bcd(value) when value >= 0 and value < 100 do
+    <<div(value, 10), 0, rem(value, 10), 0>>
+  end
+end
+```
+
+Try something simple:
+
+```elixir
+Clock.show(spi, 12, 34, 56)
+```
+
+Here's an animation of the clock. It starts at a random time and runs way faster than real time to be more exciting.
+
+```elixir
+starting_time = :rand.uniform(86400)
+
+Kino.animate(50, starting_time, fn seconds ->
+  h = seconds |> div(3600)
+  m = seconds |> div(60) |> rem(60)
+  s = seconds |> rem(60)
+
+  md = Kino.Markdown.new("Clock: `#{h}:#{m}:#{s}`")
+
+  Clock.show(spi, h, m, s)
+
+  {:cont, md, seconds + 1}
+end)
+```
