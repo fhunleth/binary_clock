@@ -1,5 +1,11 @@
 # Binary clock
 
+```elixir
+Mix.install([
+  {:circuits_spi, "~> 1.3"}
+])
+```
+
 ## Designing the board
 
 Since I wanted to be able to build my own binary clock to see if I could find a good LED driver that had fewer supply chain issues, I looked at JLCPCB's parts availability. I've used JLCPCB and they're amazingly inexpensive for building simple things. The parts list is at https://jlcpcb.com/parts.
