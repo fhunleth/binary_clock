@@ -16,7 +16,7 @@ The datasheet can be downloaded at https://jlcpcb.com/parts/componentSearch?isSe
 
 Even though I can't read Chinese, I found the original TM1620 datasheet promising enough to try. The circuit on page 18 was super helful since it shows how the LEDs are hooked up. The wires are hooked up in a grid pattern. The `SEGn` wires are the rows. The `GRIDn` wires are columns.
 
-You can see how I hooked up the LEDs at https://github.com/fhunleth/binary_clock/blob/main/hw/Schematic_binary_clock2_2022-03-19.pdf.
+You can see how I hooked up the LEDs at https://github.com/fhunleth/binary_clock/blob/main/hw/Schematic_binary_clock.pdf.
 
 The schematic will be important later.
 
