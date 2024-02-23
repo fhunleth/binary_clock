@@ -37,6 +37,10 @@ alias Circuits.SPI
 {:ok, spi} = SPI.open("spidev0.0", mode: 3, lsb_first: true)
 ```
 
+The error message `unsupported mode bits 8` might be printed due to hardware
+that doesn't support the LBS-first mode, which can be ignored since
+Circuits.SPI handles it automatically.
+
 ## SPI communication
 
 The next step is to send data to the TM1620 to make it turn on an LED. The flow chart on page 7 of the datasheet shows how to do this:
