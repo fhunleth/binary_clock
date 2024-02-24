@@ -38,7 +38,7 @@ alias Circuits.SPI
 ```
 
 The error message `unsupported mode bits 8` might be printed due to hardware
-that doesn't support the LBS-first mode, which can be ignored since
+that doesn't support the LSB-first mode, which can be ignored since
 Circuits.SPI handles it automatically.
 
 ## SPI communication
